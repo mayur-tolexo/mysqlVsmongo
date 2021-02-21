@@ -23,31 +23,19 @@ type Employee struct {
 
 func main() {
 	ctx := context.TODO()
-	datasize := []int{10, 100, 1000, 10000, 100000}
+	// different data sizes used for comparision of operations
+	datasize := []int{10, 100, 1000, 10000}
+
+	// creating mongo connection to the collection
 	collection := db.GetMongoCollection()
+	// creating mysql connecting to the database
 	mysqlConn := db.GetMySQLConnection()
+
+	// permorming insert, select, update and delete operations in mongoDB
 	performMongoOperation(ctx, collection, datasize...)
+	// permorming insert, select, update and delete operations in mysqlDB
 	performMysqlOperation(ctx, mysqlConn, datasize...)
 
-}
-
-func createDB(mysqlConn *sql.DB) {
-	sql := "CREATE DATABASE IF NOT EXISTS test"
-	mysqlConn.Exec(sql)
-}
-
-func createTable(mysqlConn *sql.DB) {
-	sql := `
-DROP TABLE IF EXISTS employee;
-CREATE TABLE employee ( 
-employee_id INT(50) NOT NULL ,
-firstname VARCHAR(100) NOT NULL ,
-lastname VARCHAR(100) NOT NULL , 
-dob DATETIME NOT NULL , 
-password TEXT NOT NULL 
-);
-`
-	mysqlConn.Exec(sql)
 }
 
 func performMysqlOperation(ctx context.Context, mysqlConn *sql.DB, datasize ...int) {
@@ -57,13 +45,15 @@ func performMysqlOperation(ctx context.Context, mysqlConn *sql.DB, datasize ...i
 loop:
 	for _, limit := range datasize {
 
-		//insert
+		// inserting employee details into mysql db
 		tag := "[insert]"
 		stime := time.Now()
 		for i := 1; i <= limit; i++ {
-			data := getRandomEmployDetail(i)
-			query := "INSERT INTO employee(employee_id, firstname, lastname, dob, password) VALUES(?,?,?,?,?)"
-			params := []interface{}{data.EmployeeID, data.Firstname, data.Lastname, data.DOB, data.Password}
+			data := getRandomEmployeeDetail(i)
+			query := `INSERT INTO employee(employee_id, firstname,
+				lastname, dob, password) VALUES(?,?,?,?,?)`
+			params := []interface{}{data.EmployeeID, data.Firstname,
+				data.Lastname, data.DOB, data.Password}
 			_, err := mysqlConn.Exec(query, params...)
 			if err != nil {
 				fmt.Println(tag, err)
@@ -72,7 +62,7 @@ loop:
 		}
 		printStats(tag, limit, stime)
 
-		// select
+		// selecting the records from mysql db
 		tag = "[select]"
 		stime = time.Now()
 		query := "SELECT * FROM employee"
@@ -83,7 +73,23 @@ loop:
 		}
 		printStats(tag, limit, stime)
 
-		// delete
+		// updating the employee details into mysql db
+		tag = "[update]"
+		stime = time.Now()
+		for i := 1; i <= limit; i++ {
+			data := getRandomEmployeeDetail(i)
+			query := `UPDATE employee set firstname=?, lastname=?, dob=?, password=?
+			WHERE employee_id = ?`
+			params := []interface{}{data.Firstname, data.Lastname, data.DOB, data.Password, i}
+			_, err := mysqlConn.Exec(query, params...)
+			if err != nil {
+				fmt.Println(tag, err)
+				break loop
+			}
+		}
+		printStats(tag, limit, stime)
+
+		// deleting the records from mysql db
 		tag = "[delete]"
 		stime = time.Now()
 		query = "DELETE FROM employee"
@@ -102,11 +108,11 @@ func performMongoOperation(ctx context.Context, collection *mongo.Collection, da
 	fmt.Println("----MongoDB performance----")
 loop:
 	for _, limit := range datasize {
-		// inserting records
+		// inserting employee details into mongo db
 		tag := "[insert]"
 		stime := time.Now()
 		for i := 1; i <= limit; i++ {
-			data := getRandomEmployDetail(i)
+			data := getRandomEmployeeDetail(i)
 			_, err := collection.InsertOne(ctx, data)
 			if err != nil {
 				fmt.Println(tag, err)
@@ -115,7 +121,7 @@ loop:
 		}
 		printStats(tag, limit, stime)
 
-		// selection records
+		// selecting the records from mongo db
 		tag = "[select]"
 		stime = time.Now()
 		_, err := collection.CountDocuments(ctx, bson.M{})
@@ -125,11 +131,11 @@ loop:
 		}
 		printStats(tag, limit, stime)
 
-		// updating records
+		// updating the records in mongo db
 		tag = "[update]"
 		stime = time.Now()
 		for i := 1; i <= limit; i++ {
-			data := getRandomEmployDetail(i)
+			data := getRandomEmployeeDetail(i)
 			filter := bson.M{"employee_id": i}
 			_, err := collection.UpdateOne(ctx, filter, bson.M{"$set": data})
 			if err != nil {
@@ -139,7 +145,7 @@ loop:
 		}
 		printStats(tag, limit, stime)
 
-		// deleting records
+		// deleting the records from mongo db
 		tag = "[delete]"
 		stime = time.Now()
 		_, err = collection.DeleteMany(ctx, bson.M{})
@@ -152,11 +158,8 @@ loop:
 	}
 }
 
-func printStats(tag string, dataSize int, stime time.Time) {
-	fmt.Println(tag, "records:", dataSize, "time:", time.Since(stime).Milliseconds(), "ms")
-}
-
-func getRandomEmployDetail(id int) Employee {
+// generating random employee details
+func getRandomEmployeeDetail(id int) Employee {
 	size := 50
 	data := Employee{
 		EmployeeID: id,
@@ -166,4 +169,29 @@ func getRandomEmployDetail(id int) Employee {
 		Password:   common.RandStringRunes(size),
 	}
 	return data
+}
+
+// createDB will create the database if not exists
+func createDB(mysqlConn *sql.DB) {
+	sql := "CREATE DATABASE IF NOT EXISTS test"
+	mysqlConn.Exec(sql)
+}
+
+// createTable will create the table if not exists
+func createTable(mysqlConn *sql.DB) {
+	sql := `
+DROP TABLE IF EXISTS employee;
+CREATE TABLE employee ( 
+employee_id INT(50) NOT NULL ,
+firstname VARCHAR(100) NOT NULL ,
+lastname VARCHAR(100) NOT NULL , 
+dob DATETIME NOT NULL , 
+password TEXT NOT NULL 
+);
+`
+	mysqlConn.Exec(sql)
+}
+
+func printStats(tag string, dataSize int, stime time.Time) {
+	fmt.Println(tag, "records:", dataSize, "time:", time.Since(stime).Milliseconds(), "ms")
 }
